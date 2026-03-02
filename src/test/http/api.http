@@ -1,0 +1,85 @@
+### Health check
+GET http://localhost:8080/api/health
+
+###
+
+### List all published posts (empty initially)
+GET http://localhost:8080/api/posts
+
+###
+
+### Get post by slug (will 404 if not found)
+GET http://localhost:8080/api/posts/my-first-post
+
+###
+
+### Login - get JWT token (run this first)
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+> {%
+client.global.set("auth_token", response.body.token);
+%}
+
+###
+
+### Create a post
+POST http://localhost:8080/api/posts
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "title": "My Second Post",
+  "slug": "my-second-post",
+  "content": "This is the full content of my first blog post.",
+  "excerpt": "A short excerpt.",
+  "published": true
+}
+
+###
+
+### List posts again (should now show the created post)
+GET http://localhost:8080/api/posts
+
+###
+
+### Get post by slug
+GET http://localhost:8080/api/posts/my-first-post
+
+###
+
+### Update post (replace 1 with actual post ID)
+PUT http://localhost:8080/api/posts/1
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "title": "My First Post (Updated)",
+  "slug": "my-first-post",
+  "content": "Updated content.",
+  "excerpt": "Updated excerpt.",
+  "published": true
+}
+
+###
+
+### Delete post (replace 1 with actual post ID)
+DELETE http://localhost:8080/api/posts/1
+Authorization: Bearer {{auth_token}}
+
+###
+
+### Attempt protected endpoint without token (should 401/403)
+POST http://localhost:8080/api/posts
+Content-Type: application/json
+
+{
+  "title": "Should fail",
+  "slug": "should-fail",
+  "content": "No auth header."
+}

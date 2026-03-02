@@ -4,12 +4,14 @@ import nz.clem.blog.dto.PostDTO;
 import nz.clem.blog.entity.Post;
 import nz.clem.blog.repository.PostRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -43,35 +45,45 @@ public class PostController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<PostDTO> createPost(@RequestBody PostDTO postDTO) {
-        Post post = new Post();
-        post.setTitle(postDTO.getTitle());
-        post.setSlug(postDTO.getSlug());
-        post.setContent(postDTO.getContent());
-        post.setExcerpt(postDTO.getExcerpt());
-        post.setPublished(postDTO.getPublished() != null && postDTO.getPublished());
+    public ResponseEntity<?> createPost(@RequestBody PostDTO postDTO) {
+        try {
+            Post post = new Post();
+            post.setTitle(postDTO.getTitle());
+            post.setSlug(postDTO.getSlug());
+            post.setContent(postDTO.getContent());
+            post.setExcerpt(postDTO.getExcerpt());
+            post.setPublished(postDTO.getPublished() != null && postDTO.getPublished());
 
-        Post savedPost = postRepository.save(post);
-        return ResponseEntity.status(HttpStatus.CREATED).body(convertToDTO(savedPost));
+            Post savedPost = postRepository.save(post);
+            return ResponseEntity.status(HttpStatus.CREATED).body(convertToDTO(savedPost));
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "A post with slug '" + postDTO.getSlug() + "' already exists"));
+        }
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<PostDTO> updatePost(@PathVariable Long id, @RequestBody PostDTO postDTO) {
+    public ResponseEntity<?> updatePost(@PathVariable Long id, @RequestBody PostDTO postDTO) {
         Optional<Post> post = postRepository.findById(id);
         if (post.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
 
-        Post existingPost = post.get();
-        existingPost.setTitle(postDTO.getTitle());
-        existingPost.setSlug(postDTO.getSlug());
-        existingPost.setContent(postDTO.getContent());
-        existingPost.setExcerpt(postDTO.getExcerpt());
-        existingPost.setPublished(postDTO.getPublished() != null && postDTO.getPublished());
+        try {
+            Post existingPost = post.get();
+            existingPost.setTitle(postDTO.getTitle());
+            existingPost.setSlug(postDTO.getSlug());
+            existingPost.setContent(postDTO.getContent());
+            existingPost.setExcerpt(postDTO.getExcerpt());
+            existingPost.setPublished(postDTO.getPublished() != null && postDTO.getPublished());
 
-        Post updatedPost = postRepository.save(existingPost);
-        return ResponseEntity.ok(convertToDTO(updatedPost));
+            Post updatedPost = postRepository.save(existingPost);
+            return ResponseEntity.ok(convertToDTO(updatedPost));
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "A post with slug '" + postDTO.getSlug() + "' already exists"));
+        }
     }
 
     @DeleteMapping("/{id}")
