@@ -43,6 +43,15 @@ public class PostController {
         return ResponseEntity.ok(convertToDTO(post.get()));
     }
 
+    @GetMapping("/id/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PostDTO> getPostById(@PathVariable Long id) {
+        return postRepository.findById(id)
+                .map(this::convertToDTO)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> createPost(@RequestBody PostDTO postDTO) {
