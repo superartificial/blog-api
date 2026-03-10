@@ -1,6 +1,7 @@
 package nz.clem.blog.controller;
 
 import nz.clem.blog.dto.PostDTO;
+import nz.clem.blog.dto.PostSummaryDTO;
 import nz.clem.blog.entity.Post;
 import nz.clem.blog.repository.PostRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,10 +24,10 @@ public class PostController {
     private PostRepository postRepository;
 
     @GetMapping
-    public ResponseEntity<List<PostDTO>> getAllPublishedPosts() {
-        List<PostDTO> posts = postRepository.findByPublishedTrue()
+    public ResponseEntity<List<PostSummaryDTO>> getAllPublishedPosts() {
+        List<PostSummaryDTO> posts = postRepository.findByPublishedTrue()
                 .stream()
-                .map(this::convertToDTO)
+                .map(this::convertToSummaryDTO)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(posts);
     }
@@ -104,6 +105,18 @@ public class PostController {
         }
         postRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private PostSummaryDTO convertToSummaryDTO(Post post) {
+        PostSummaryDTO dto = new PostSummaryDTO();
+        dto.setId(post.getId());
+        dto.setTitle(post.getTitle());
+        dto.setSlug(post.getSlug());
+        dto.setExcerpt(post.getExcerpt());
+        dto.setPublished(post.getPublished());
+        dto.setCreatedAt(post.getCreatedAt());
+        dto.setUpdatedAt(post.getUpdatedAt());
+        return dto;
     }
 
     private PostDTO convertToDTO(Post post) {
