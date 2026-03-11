@@ -28,6 +28,12 @@ public class Post {
 
     private String excerpt;
 
+    @Column(columnDefinition = "TEXT")
+    private String humanIntro;
+
+    @Column(columnDefinition = "TEXT")
+    private String aiNotes;
+
     @Column(nullable = false)
     private Boolean published = false;
 

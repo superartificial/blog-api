@@ -15,6 +15,8 @@ public class PostDTO {
     private String slug;
     private String content;
     private String excerpt;
+    private String humanIntro;
+    private String aiNotes;
     private Boolean published;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

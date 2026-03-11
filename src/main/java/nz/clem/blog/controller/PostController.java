@@ -62,6 +62,8 @@ public class PostController {
             post.setSlug(postDTO.getSlug());
             post.setContent(postDTO.getContent());
             post.setExcerpt(postDTO.getExcerpt());
+            post.setHumanIntro(postDTO.getHumanIntro());
+            post.setAiNotes(postDTO.getAiNotes());
             post.setPublished(postDTO.getPublished() != null && postDTO.getPublished());
 
             Post savedPost = postRepository.save(post);
@@ -86,6 +88,8 @@ public class PostController {
             existingPost.setSlug(postDTO.getSlug());
             existingPost.setContent(postDTO.getContent());
             existingPost.setExcerpt(postDTO.getExcerpt());
+            existingPost.setHumanIntro(postDTO.getHumanIntro());
+            existingPost.setAiNotes(postDTO.getAiNotes());
             existingPost.setPublished(postDTO.getPublished() != null && postDTO.getPublished());
 
             Post updatedPost = postRepository.save(existingPost);
@@ -126,6 +130,8 @@ public class PostController {
         dto.setSlug(post.getSlug());
         dto.setContent(post.getContent());
         dto.setExcerpt(post.getExcerpt());
+        dto.setHumanIntro(post.getHumanIntro());
+        dto.setAiNotes(post.getAiNotes());
         dto.setPublished(post.getPublished());
         dto.setCreatedAt(post.getCreatedAt());
         dto.setUpdatedAt(post.getUpdatedAt());
