@@ -38,7 +38,7 @@ Authorization: Bearer {{auth_token}}
   "slug": "my-second-post",
   "content": "This is the full content of my first blog post.",
   "excerpt": "A short excerpt.",
-  "published": true
+  "status": "PUBLISHED"
 }
 
 ###
@@ -63,7 +63,7 @@ Authorization: Bearer {{auth_token}}
   "slug": "my-first-post",
   "content": "Updated content.",
   "excerpt": "Updated excerpt.",
-  "published": true
+  "status": "PUBLISHED"
 }
 
 ###

@@ -1,0 +1,477 @@
+# Pages API tests
+# Run requests in order — each builds on state from the previous.
+# Start with "Login" to capture the auth token, then run the rest in sequence.
+
+### ─── AUTH ──────────────────────────────────────────────────────────────────
+
+### Login — captures auth_token for all subsequent requests
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+> {%
+client.test("Login succeeds", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+    client.assert(response.body.token !== undefined, "No token in response");
+});
+client.global.set("auth_token", response.body.token);
+%}
+
+###
+
+### ─── PUBLIC — EMPTY STATE ───────────────────────────────────────────────────
+
+### Public page list — empty before anything is published
+GET http://localhost:8080/api/pages
+
+> {%
+client.test("Status 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+client.test("Returns empty array", function () {
+    client.assert(Array.isArray(response.body), "Expected array");
+    client.assert(response.body.length === 0, "Expected empty array");
+});
+%}
+
+###
+
+### ─── CREATE ──────────────────────────────────────────────────────────────────
+
+### Create a page (DRAFT by default)
+POST http://localhost:8080/api/pages
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "title": "About This Site",
+  "slug": "about",
+  "metaDescription": "Learn about clem.nz",
+  "status": "DRAFT"
+}
+
+> {%
+client.test("Created with 201", function () {
+    client.assert(response.status === 201, "Expected 201, got " + response.status);
+});
+client.test("Response has expected fields", function () {
+    client.assert(response.body.id !== undefined, "Missing id");
+    client.assert(response.body.slug === "about", "Unexpected slug: " + response.body.slug);
+    client.assert(response.body.status === "DRAFT", "Expected DRAFT, got " + response.body.status);
+    client.assert(Array.isArray(response.body.blocks), "Expected blocks array");
+    client.assert(response.body.blocks.length === 0, "Expected no blocks yet");
+});
+client.global.set("page_id", response.body.id);
+client.global.set("page_slug", response.body.slug);
+%}
+
+###
+
+### Duplicate slug — should conflict
+POST http://localhost:8080/api/pages
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "title": "About (duplicate)",
+  "slug": "about",
+  "status": "DRAFT"
+}
+
+> {%
+client.test("Duplicate slug returns 409", function () {
+    client.assert(response.status === 409, "Expected 409, got " + response.status);
+    client.assert(response.body.error !== undefined, "Expected error message");
+});
+%}
+
+###
+
+### Create without auth — should be rejected
+POST http://localhost:8080/api/pages
+Content-Type: application/json
+
+{
+  "title": "Sneaky page",
+  "slug": "sneaky",
+  "status": "DRAFT"
+}
+
+> {%
+client.test("Unauthenticated create returns 401 or 403", function () {
+    client.assert(response.status === 401 || response.status === 403,
+        "Expected 401 or 403, got " + response.status);
+});
+%}
+
+###
+
+### ─── ADMIN READ ──────────────────────────────────────────────────────────────
+
+### Admin list — should include the draft
+GET http://localhost:8080/api/pages/admin/all
+Authorization: Bearer {{auth_token}}
+
+> {%
+client.test("Status 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+client.test("Draft page appears in admin list", function () {
+    client.assert(Array.isArray(response.body), "Expected array");
+    var found = response.body.some(function (p) { return p.slug === "about"; });
+    client.assert(found, "Draft page not found in admin list");
+});
+%}
+
+###
+
+### Admin list without auth — should be rejected
+GET http://localhost:8080/api/pages/admin/all
+
+> {%
+client.test("Unauthenticated admin list returns 401 or 403", function () {
+    client.assert(response.status === 401 || response.status === 403,
+        "Expected 401 or 403, got " + response.status);
+});
+%}
+
+###
+
+### Admin get by ID
+GET http://localhost:8080/api/pages/admin/{{page_id}}
+Authorization: Bearer {{auth_token}}
+
+> {%
+client.test("Status 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+client.test("Correct page returned", function () {
+    client.assert(response.body.id === client.global.get("page_id"), "ID mismatch");
+    client.assert(response.body.title === "About This Site", "Title mismatch");
+});
+%}
+
+###
+
+### Public get by slug — draft should be hidden
+GET http://localhost:8080/api/pages/about
+
+> {%
+client.test("Draft page not publicly visible (404)", function () {
+    client.assert(response.status === 404, "Expected 404, got " + response.status);
+});
+%}
+
+###
+
+### ─── BLOCKS ──────────────────────────────────────────────────────────────────
+
+### Add a HERO block
+POST http://localhost:8080/api/pages/{{page_id}}/blocks
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "blockType": "HERO",
+  "content": {
+    "title": "Hi, I'm Clem",
+    "subtitle": "Developer, writer, tinkerer.",
+    "ctaText": "Read the blog",
+    "ctaUrl": "/posts"
+  }
+}
+
+> {%
+client.test("Block created with 201", function () {
+    client.assert(response.status === 201, "Expected 201, got " + response.status);
+});
+client.test("Block has correct type and content", function () {
+    client.assert(response.body.blockType === "HERO", "Expected HERO");
+    client.assert(response.body.content.title === "Hi, I'm Clem", "Title mismatch");
+    client.assert(response.body.id !== undefined, "Missing block id");
+});
+client.global.set("hero_block_id", response.body.id);
+client.global.set("hero_sort_order", response.body.sortOrder);
+%}
+
+###
+
+### Add a RICH_TEXT block
+POST http://localhost:8080/api/pages/{{page_id}}/blocks
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "blockType": "RICH_TEXT",
+  "content": {
+    "body": "## About me\n\nI build things and write about them."
+  }
+}
+
+> {%
+client.test("Block created with 201", function () {
+    client.assert(response.status === 201, "Expected 201, got " + response.status);
+});
+client.test("Block has correct type", function () {
+    client.assert(response.body.blockType === "RICH_TEXT", "Expected RICH_TEXT");
+    client.assert(response.body.content.body !== undefined, "Missing body");
+});
+client.global.set("rt_block_id", response.body.id);
+client.global.set("rt_sort_order", response.body.sortOrder);
+%}
+
+###
+
+### Add a block with an invalid type — should 400
+POST http://localhost:8080/api/pages/{{page_id}}/blocks
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "blockType": "INVALID_TYPE",
+  "content": {}
+}
+
+> {%
+client.test("Invalid block type returns 400", function () {
+    client.assert(response.status === 400, "Expected 400, got " + response.status);
+    client.assert(response.body.error !== undefined, "Expected error message");
+});
+%}
+
+###
+
+### Add block to a non-existent page — should 404
+POST http://localhost:8080/api/pages/999999/blocks
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "blockType": "RICH_TEXT",
+  "content": {"body": "orphan"}
+}
+
+> {%
+client.test("Block on missing page returns 404", function () {
+    client.assert(response.status === 404, "Expected 404, got " + response.status);
+});
+%}
+
+###
+
+### ─── UPDATE BLOCK ────────────────────────────────────────────────────────────
+
+### Update the HERO block content
+PUT http://localhost:8080/api/pages/{{page_id}}/blocks/{{hero_block_id}}
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "content": {
+    "title": "Hi, I'm Clem (updated)",
+    "subtitle": "Developer, writer, tinkerer.",
+    "ctaText": "Read the blog",
+    "ctaUrl": "/posts"
+  }
+}
+
+> {%
+client.test("Block updated with 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+client.test("Updated content is reflected", function () {
+    client.assert(response.body.content.title === "Hi, I'm Clem (updated)", "Update not reflected");
+});
+%}
+
+###
+
+### ─── REORDER BLOCKS ──────────────────────────────────────────────────────────
+
+### Swap the sort order of both blocks
+PUT http://localhost:8080/api/pages/{{page_id}}/blocks/reorder
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "blocks": [
+    {"id": {{hero_block_id}}, "sortOrder": 10},
+    {"id": {{rt_block_id}},   "sortOrder": 0}
+  ]
+}
+
+> {%
+client.test("Reorder returns 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+%}
+
+###
+
+### Verify reorder — RICH_TEXT should now come first
+GET http://localhost:8080/api/pages/admin/{{page_id}}
+Authorization: Bearer {{auth_token}}
+
+> {%
+client.test("Status 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+client.test("RICH_TEXT block is now first (sortOrder 0)", function () {
+    var blocks = response.body.blocks;
+    client.assert(blocks.length === 2, "Expected 2 blocks, got " + blocks.length);
+    client.assert(blocks[0].blockType === "RICH_TEXT", "Expected RICH_TEXT first, got " + blocks[0].blockType);
+    client.assert(blocks[1].blockType === "HERO", "Expected HERO second, got " + blocks[1].blockType);
+});
+%}
+
+###
+
+### ─── PUBLISH & PUBLIC ACCESS ─────────────────────────────────────────────────
+
+### Update page status to PUBLISHED
+PUT http://localhost:8080/api/pages/{{page_id}}
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "status": "PUBLISHED"
+}
+
+> {%
+client.test("Update returns 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+client.test("Status is now PUBLISHED", function () {
+    client.assert(response.body.status === "PUBLISHED", "Expected PUBLISHED, got " + response.body.status);
+});
+%}
+
+###
+
+### Public page list — should now include the published page
+GET http://localhost:8080/api/pages
+
+> {%
+client.test("Status 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+client.test("Published page appears in public list", function () {
+    client.assert(response.body.length === 1, "Expected 1 page, got " + response.body.length);
+    client.assert(response.body[0].slug === "about", "Unexpected slug");
+});
+%}
+
+###
+
+### Public get by slug — now published, should return with blocks
+GET http://localhost:8080/api/pages/about
+
+> {%
+client.test("Status 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+client.test("Page returned with blocks", function () {
+    client.assert(response.body.slug === "about", "Slug mismatch");
+    client.assert(response.body.status === "PUBLISHED", "Expected PUBLISHED");
+    client.assert(Array.isArray(response.body.blocks), "Expected blocks array");
+    client.assert(response.body.blocks.length === 2, "Expected 2 blocks, got " + response.body.blocks.length);
+});
+%}
+
+###
+
+### ─── DELETE BLOCK ────────────────────────────────────────────────────────────
+
+### Delete the HERO block
+DELETE http://localhost:8080/api/pages/{{page_id}}/blocks/{{hero_block_id}}
+Authorization: Bearer {{auth_token}}
+
+> {%
+client.test("Block deleted with 204", function () {
+    client.assert(response.status === 204, "Expected 204, got " + response.status);
+});
+%}
+
+###
+
+### Confirm deletion — page should now have only 1 block
+GET http://localhost:8080/api/pages/about
+
+> {%
+client.test("Status 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+client.test("Only 1 block remains", function () {
+    client.assert(response.body.blocks.length === 1, "Expected 1 block, got " + response.body.blocks.length);
+    client.assert(response.body.blocks[0].blockType === "RICH_TEXT", "Expected remaining block to be RICH_TEXT");
+});
+%}
+
+###
+
+### Delete block again — should 404
+DELETE http://localhost:8080/api/pages/{{page_id}}/blocks/{{hero_block_id}}
+Authorization: Bearer {{auth_token}}
+
+> {%
+client.test("Deleting missing block returns 404", function () {
+    client.assert(response.status === 404, "Expected 404, got " + response.status);
+});
+%}
+
+###
+
+### ─── DELETE PAGE ─────────────────────────────────────────────────────────────
+
+### Delete the page (cascades its remaining blocks)
+DELETE http://localhost:8080/api/pages/{{page_id}}
+Authorization: Bearer {{auth_token}}
+
+> {%
+client.test("Page deleted with 204", function () {
+    client.assert(response.status === 204, "Expected 204, got " + response.status);
+});
+%}
+
+###
+
+### Public list is empty again after deletion
+GET http://localhost:8080/api/pages
+
+> {%
+client.test("Status 200", function () {
+    client.assert(response.status === 200, "Expected 200, got " + response.status);
+});
+client.test("Page list is empty after deletion", function () {
+    client.assert(response.body.length === 0, "Expected empty list after deletion");
+});
+%}
+
+###
+
+### Public get by slug — deleted page returns 404
+GET http://localhost:8080/api/pages/about
+
+> {%
+client.test("Deleted page returns 404", function () {
+    client.assert(response.status === 404, "Expected 404, got " + response.status);
+});
+%}
+
+###
+
+### Delete page again — should 404
+DELETE http://localhost:8080/api/pages/{{page_id}}
+Authorization: Bearer {{auth_token}}
+
+> {%
+client.test("Deleting missing page returns 404", function () {
+    client.assert(response.status === 404, "Expected 404, got " + response.status);
+});
+%}
+
+###
