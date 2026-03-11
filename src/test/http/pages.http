@@ -49,7 +49,7 @@ Authorization: Bearer {{auth_token}}
 
 {
   "title": "About This Site",
-  "slug": "about",
+  "slug": "about-new",
   "metaDescription": "Learn about clem.nz",
   "status": "DRAFT"
 }
@@ -78,7 +78,7 @@ Authorization: Bearer {{auth_token}}
 
 {
   "title": "About (duplicate)",
-  "slug": "about",
+  "slug": "about-new",
   "status": "DRAFT"
 }
 
@@ -361,14 +361,14 @@ client.test("Status 200", function () {
 });
 client.test("Published page appears in public list", function () {
     client.assert(response.body.length === 1, "Expected 1 page, got " + response.body.length);
-    client.assert(response.body[0].slug === "about", "Unexpected slug");
+    client.assert(response.body[0].slug === "about-new", "Unexpected slug");
 });
 %}
 
 ###
 
 ### Public get by slug — now published, should return with blocks
-GET http://localhost:8080/api/pages/about
+GET http://localhost:8080/api/pages/about-new
 
 > {%
 client.test("Status 200", function () {
