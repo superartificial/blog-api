@@ -53,6 +53,15 @@ public class ContactController {
         }).orElse(ResponseEntity.notFound().build());
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        if (!contactRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        contactRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
     private ContactSubmissionDTO toDTO(ContactSubmission s) {
         return new ContactSubmissionDTO(
                 s.getId(), s.getName(), s.getEmail(), s.getMessage(),

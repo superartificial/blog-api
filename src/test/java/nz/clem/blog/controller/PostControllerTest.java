@@ -1,6 +1,7 @@
 package nz.clem.blog.controller;
 
 import nz.clem.blog.entity.Post;
+import nz.clem.blog.entity.PostStatus;
 import nz.clem.blog.repository.PostRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,9 +45,9 @@ class PostControllerTest {
         post.setTitle("Hello World");
         post.setSlug("hello-world");
         post.setContent("Some content");
-        post.setPublished(true);
+        post.setStatus(PostStatus.PUBLISHED);
 
-        when(postRepository.findByPublishedTrue()).thenReturn(List.of(post));
+        when(postRepository.findByStatusOrderByCreatedAtDesc(PostStatus.PUBLISHED)).thenReturn(List.of(post));
 
         // when / then
         mockMvc.perform(get("/api/posts"))
@@ -58,7 +59,7 @@ class PostControllerTest {
 
     @Test
     void getAllPublishedPosts_returnsEmptyList_whenNoPosts() throws Exception {
-        when(postRepository.findByPublishedTrue()).thenReturn(List.of());
+        when(postRepository.findByStatusOrderByCreatedAtDesc(PostStatus.PUBLISHED)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/posts"))
                 .andExpect(status().isOk())
@@ -74,7 +75,7 @@ class PostControllerTest {
         post.setTitle("Hello World");
         post.setSlug("hello-world");
         post.setContent("Some content");
-        post.setPublished(true);
+        post.setStatus(PostStatus.PUBLISHED);
 
         when(postRepository.findBySlug("hello-world")).thenReturn(Optional.of(post));
 
@@ -101,11 +102,11 @@ class PostControllerTest {
         draft.setTitle("Draft Post");
         draft.setSlug("draft-post");
         draft.setContent("Work in progress");
-        draft.setPublished(false);
+        draft.setStatus(PostStatus.DRAFT);
 
         when(postRepository.findBySlug("draft-post")).thenReturn(Optional.of(draft));
 
-        // when / then — unpublished posts should be invisible to public readers
+        // when / then — non-published posts should be invisible to public readers
         mockMvc.perform(get("/api/posts/draft-post"))
                 .andExpect(status().isNotFound());
     }

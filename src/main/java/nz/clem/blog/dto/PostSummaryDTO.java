@@ -14,7 +14,7 @@ public class PostSummaryDTO {
     private String title;
     private String slug;
     private String excerpt;
-    private Boolean published;
+    private String status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -1,0 +1,3 @@
+ALTER TABLE posts ADD COLUMN status VARCHAR(50) NOT NULL DEFAULT 'DRAFT';
+UPDATE posts SET status = 'PUBLISHED' WHERE published = true;
+ALTER TABLE posts DROP COLUMN published;

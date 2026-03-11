@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import nz.clem.blog.entity.PostStatus;
 
 @Entity
 @Table(name = "posts")
@@ -34,8 +35,9 @@ public class Post {
     @Column(columnDefinition = "TEXT")
     private String aiNotes;
 
-    @Column(nullable = false)
-    private Boolean published = false;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 50)
+    private PostStatus status = PostStatus.DRAFT;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();

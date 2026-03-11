@@ -17,7 +17,7 @@ public class PostDTO {
     private String excerpt;
     private String humanIntro;
     private String aiNotes;
-    private Boolean published;
+    private String status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
