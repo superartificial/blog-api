@@ -1,7 +1,6 @@
 package nz.clem.blog.service;
 
 import nz.clem.blog.entity.ContentBlock;
-import nz.clem.blog.entity.ImageReference;
 import nz.clem.blog.entity.Page;
 import nz.clem.blog.entity.Post;
 import nz.clem.blog.repository.ImageReferenceRepository;
@@ -37,14 +36,9 @@ public class ImageReferenceService {
         urls.addAll(extractMarkdownImageUrls(post.getAiNotes()));
 
         for (String url : urls) {
-            imageRepository.findByUrl(url).ifPresent(image -> {
-                ImageReference ref = new ImageReference();
-                ref.setImageId(image.getId());
-                ref.setEntityType("POST");
-                ref.setEntityId(post.getId());
-                ref.setFieldName("content");
-                imageReferenceRepository.save(ref);
-            });
+            imageRepository.findByUrl(url).ifPresent(image ->
+                    imageReferenceRepository.insertIfNotExists(image.getId(), "POST", post.getId(), "content")
+            );
         }
     }
 
@@ -80,14 +74,9 @@ public class ImageReferenceService {
         }
 
         for (String url : urls) {
-            imageRepository.findByUrl(url).ifPresent(image -> {
-                ImageReference ref = new ImageReference();
-                ref.setImageId(image.getId());
-                ref.setEntityType("CONTENT_BLOCK");
-                ref.setEntityId(block.getId());
-                ref.setFieldName(fieldName);
-                imageReferenceRepository.save(ref);
-            });
+            imageRepository.findByUrl(url).ifPresent(image ->
+                    imageReferenceRepository.insertIfNotExists(image.getId(), "CONTENT_BLOCK", block.getId(), fieldName)
+            );
         }
     }
 
@@ -97,14 +86,9 @@ public class ImageReferenceService {
 
         String ogImageUrl = page.getOgImageUrl();
         if (ogImageUrl != null && !ogImageUrl.isBlank()) {
-            imageRepository.findByUrl(ogImageUrl).ifPresent(image -> {
-                ImageReference ref = new ImageReference();
-                ref.setImageId(image.getId());
-                ref.setEntityType("PAGE");
-                ref.setEntityId(page.getId());
-                ref.setFieldName("ogImageUrl");
-                imageReferenceRepository.save(ref);
-            });
+            imageRepository.findByUrl(ogImageUrl).ifPresent(image ->
+                    imageReferenceRepository.insertIfNotExists(image.getId(), "PAGE", page.getId(), "ogImageUrl")
+            );
         }
     }
 
