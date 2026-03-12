@@ -2,6 +2,9 @@ package nz.clem.blog.controller;
 
 import nz.clem.blog.dto.ImageDTO;
 import nz.clem.blog.entity.Image;
+import nz.clem.blog.image.ImageProcessingProfile;
+import nz.clem.blog.image.ImageProcessingService;
+import nz.clem.blog.image.ProcessedImage;
 import nz.clem.blog.repository.ImageReferenceRepository;
 import nz.clem.blog.repository.ImageRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,6 +37,7 @@ public class ImageController {
     private final S3Client s3Client;
     private final ImageRepository imageRepository;
     private final ImageReferenceRepository imageReferenceRepository;
+    private final ImageProcessingService imageProcessingService;
 
     @Value("${r2.bucket}")
     private String bucket;
@@ -43,10 +47,12 @@ public class ImageController {
 
     public ImageController(S3Client s3Client,
                            ImageRepository imageRepository,
-                           ImageReferenceRepository imageReferenceRepository) {
+                           ImageReferenceRepository imageReferenceRepository,
+                           ImageProcessingService imageProcessingService) {
         this.s3Client = s3Client;
         this.imageRepository = imageRepository;
         this.imageReferenceRepository = imageReferenceRepository;
+        this.imageProcessingService = imageProcessingService;
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -56,16 +62,42 @@ public class ImageController {
             return ResponseEntity.badRequest().body(java.util.Map.of("error", "Only JPEG, PNG, GIF, and WebP images are allowed"));
         }
 
-        String ext = contentType.substring(contentType.indexOf('/') + 1);
+        byte[] originalBytes = file.getBytes();
+        byte[] mainBytes = originalBytes;
+        String mainMimeType = contentType;
+        String thumbFilename = null;
+        String thumbUrl = null;
+
+        if (imageProcessingService.canProcess(contentType)) {
+            // Resize main image
+            ProcessedImage processed = imageProcessingService.process(originalBytes, contentType, ImageProcessingProfile.STANDARD);
+            mainBytes = processed.data();
+            mainMimeType = processed.mimeType();
+
+            // Generate JPEG thumbnail
+            ProcessedImage thumb = imageProcessingService.process(originalBytes, contentType, ImageProcessingProfile.THUMBNAIL);
+            thumbFilename = "thumb_" + UUID.randomUUID() + ".jpg";
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(thumbFilename)
+                            .contentType(thumb.mimeType())
+                            .build(),
+                    RequestBody.fromBytes(thumb.data())
+            );
+            thumbUrl = publicUrl + "/" + thumbFilename;
+        }
+
+        String ext = mainMimeType.substring(mainMimeType.indexOf('/') + 1);
         String filename = UUID.randomUUID() + "." + ext;
 
         s3Client.putObject(
                 PutObjectRequest.builder()
                         .bucket(bucket)
                         .key(filename)
-                        .contentType(contentType)
+                        .contentType(mainMimeType)
                         .build(),
-                RequestBody.fromBytes(file.getBytes())
+                RequestBody.fromBytes(mainBytes)
         );
 
         String url = publicUrl + "/" + filename;
@@ -73,20 +105,13 @@ public class ImageController {
         Image image = new Image();
         image.setFilename(filename);
         image.setUrl(url);
-        image.setMimeType(contentType);
-        image.setSizeBytes(file.getSize());
+        image.setMimeType(mainMimeType);
+        image.setSizeBytes((long) mainBytes.length);
+        image.setThumbnailFilename(thumbFilename);
+        image.setThumbnailUrl(thumbUrl);
         Image savedImage = imageRepository.save(image);
 
-        ImageDTO dto = new ImageDTO(
-                savedImage.getId(),
-                savedImage.getFilename(),
-                savedImage.getUrl(),
-                savedImage.getMimeType(),
-                savedImage.getSizeBytes(),
-                savedImage.getUploadedAt(),
-                0L
-        );
-        return ResponseEntity.ok(dto);
+        return ResponseEntity.ok(toDTO(savedImage, 0L));
     }
 
     @DeleteMapping("/{id}")
@@ -97,10 +122,11 @@ public class ImageController {
         }
 
         Image image = imageOpt.get();
-        s3Client.deleteObject(DeleteObjectRequest.builder()
-                .bucket(bucket)
-                .key(image.getFilename())
-                .build());
+        s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(image.getFilename()).build());
+
+        if (image.getThumbnailFilename() != null) {
+            s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(image.getThumbnailFilename()).build());
+        }
 
         imageRepository.delete(image);
         return ResponseEntity.noContent().build();
@@ -112,16 +138,21 @@ public class ImageController {
         List<ImageDTO> images = imageRepository.findAll()
                 .stream()
                 .sorted(Comparator.comparing(Image::getUploadedAt).reversed())
-                .map(image -> new ImageDTO(
-                        image.getId(),
-                        image.getFilename(),
-                        image.getUrl(),
-                        image.getMimeType(),
-                        image.getSizeBytes(),
-                        image.getUploadedAt(),
-                        imageReferenceRepository.countByImageId(image.getId())
-                ))
+                .map(image -> toDTO(image, imageReferenceRepository.countByImageId(image.getId())))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(images);
+    }
+
+    private ImageDTO toDTO(Image image, long referenceCount) {
+        return new ImageDTO(
+                image.getId(),
+                image.getFilename(),
+                image.getUrl(),
+                image.getThumbnailUrl(),
+                image.getMimeType(),
+                image.getSizeBytes(),
+                image.getUploadedAt(),
+                referenceCount
+        );
     }
 }

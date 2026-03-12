@@ -32,4 +32,10 @@ public class Image {
 
     @Column(name = "uploaded_at", nullable = false)
     private LocalDateTime uploadedAt = LocalDateTime.now();
+
+    @Column(name = "thumbnail_filename")
+    private String thumbnailFilename;
+
+    @Column(name = "thumbnail_url", length = 512)
+    private String thumbnailUrl;
 }
