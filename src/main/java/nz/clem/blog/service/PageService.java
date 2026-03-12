@@ -7,6 +7,7 @@ import nz.clem.blog.entity.Page;
 import nz.clem.blog.entity.PostStatus;
 import nz.clem.blog.repository.ContentBlockRepository;
 import nz.clem.blog.repository.PageRepository;
+import nz.clem.blog.service.ImageReferenceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,9 @@ public class PageService {
 
     @Autowired
     private ContentBlockRepository contentBlockRepository;
+
+    @Autowired
+    private ImageReferenceService imageReferenceService;
 
     // ── Public queries ───────────────────────────────────────────────────────
 
@@ -59,7 +63,9 @@ public class PageService {
         page.setMetaDescription(req.getMetaDescription());
         page.setOgImageUrl(req.getOgImageUrl());
         page.setStatus(parseStatus(req.getStatus()));
-        return toDTO(pageRepository.save(page));
+        Page savedPage = pageRepository.save(page);
+        imageReferenceService.syncForPage(savedPage);
+        return toDTO(savedPage);
     }
 
     @Transactional
@@ -70,13 +76,16 @@ public class PageService {
             if (req.getMetaDescription() != null) page.setMetaDescription(req.getMetaDescription());
             if (req.getOgImageUrl() != null) page.setOgImageUrl(req.getOgImageUrl());
             if (req.getStatus() != null) page.setStatus(parseStatus(req.getStatus()));
-            return toDTO(pageRepository.save(page));
+            Page savedPage = pageRepository.save(page);
+            imageReferenceService.syncForPage(savedPage);
+            return toDTO(savedPage);
         });
     }
 
     @Transactional
     public boolean deletePage(Long id) {
         if (!pageRepository.existsById(id)) return false;
+        imageReferenceService.deleteForPage(id);
         pageRepository.deleteById(id);
         return true;
     }
@@ -99,7 +108,9 @@ public class PageService {
                 block.setSortOrder(existing.isEmpty() ? 0 : existing.getLast().getSortOrder() + 10);
             }
 
-            return toBlockDTO(contentBlockRepository.save(block));
+            ContentBlock savedBlock = contentBlockRepository.save(block);
+            imageReferenceService.syncForBlock(savedBlock);
+            return toBlockDTO(savedBlock);
         });
     }
 
@@ -110,7 +121,9 @@ public class PageService {
                 .map(block -> {
                     if (req.getBlockType() != null) block.setBlockType(parseBlockType(req.getBlockType()));
                     if (req.getContent() != null) block.setContent(req.getContent());
-                    return toBlockDTO(contentBlockRepository.save(block));
+                    ContentBlock updatedBlock = contentBlockRepository.save(block);
+                    imageReferenceService.syncForBlock(updatedBlock);
+                    return toBlockDTO(updatedBlock);
                 });
     }
 
@@ -119,6 +132,7 @@ public class PageService {
         return contentBlockRepository.findById(blockId)
                 .filter(b -> b.getPage().getId().equals(pageId))
                 .map(block -> {
+                    imageReferenceService.deleteForBlock(block.getId());
                     contentBlockRepository.delete(block);
                     return true;
                 }).orElse(false);

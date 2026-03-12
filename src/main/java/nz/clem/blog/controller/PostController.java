@@ -5,6 +5,7 @@ import nz.clem.blog.dto.PostSummaryDTO;
 import nz.clem.blog.entity.Post;
 import nz.clem.blog.entity.PostStatus;
 import nz.clem.blog.repository.PostRepository;
+import nz.clem.blog.service.ImageReferenceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,9 @@ public class PostController {
 
     @Autowired
     private PostRepository postRepository;
+
+    @Autowired
+    private ImageReferenceService imageReferenceService;
 
     @GetMapping
     public ResponseEntity<List<PostSummaryDTO>> getAllPublishedPosts() {
@@ -85,6 +89,7 @@ public class PostController {
             post.setStatus(parseStatus(postDTO.getStatus()));
 
             Post savedPost = postRepository.save(post);
+            imageReferenceService.syncForPost(savedPost);
             return ResponseEntity.status(HttpStatus.CREATED).body(convertToDTO(savedPost));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -111,6 +116,7 @@ public class PostController {
             existingPost.setStatus(parseStatus(postDTO.getStatus()));
 
             Post updatedPost = postRepository.save(existingPost);
+            imageReferenceService.syncForPost(updatedPost);
             return ResponseEntity.ok(convertToDTO(updatedPost));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -125,6 +131,7 @@ public class PostController {
         if (post.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
+        imageReferenceService.deleteForPost(id);
         postRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }
