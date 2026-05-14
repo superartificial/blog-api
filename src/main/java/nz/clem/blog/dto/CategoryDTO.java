@@ -15,4 +15,5 @@ public class CategoryDTO {
     private String slug;
     private Long parentId;
     private List<CategoryDTO> children;
+    private int sortOrder;
 }

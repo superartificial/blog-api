@@ -23,4 +23,7 @@ public class Category {
 
     @Column(name = "parent_id")
     private Long parentId;
+
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder = 0;
 }

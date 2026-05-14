@@ -22,12 +22,12 @@ public class CategoryController {
 
     @GetMapping
     public ResponseEntity<List<CategoryDTO>> getAll() {
-        List<Category> roots = categoryRepository.findByParentIdIsNullOrderByNameAsc();
+        List<Category> roots = categoryRepository.findByParentIdIsNullOrderBySortOrderAscNameAsc();
         List<CategoryDTO> result = roots.stream().map(root -> {
-            List<CategoryDTO> children = categoryRepository.findByParentIdOrderByNameAsc(root.getId())
-                    .stream().map(child -> new CategoryDTO(child.getId(), child.getName(), child.getSlug(), child.getParentId(), List.of()))
+            List<CategoryDTO> children = categoryRepository.findByParentIdOrderBySortOrderAscNameAsc(root.getId())
+                    .stream().map(child -> new CategoryDTO(child.getId(), child.getName(), child.getSlug(), child.getParentId(), List.of(), child.getSortOrder()))
                     .collect(Collectors.toList());
-            return new CategoryDTO(root.getId(), root.getName(), root.getSlug(), null, children);
+            return new CategoryDTO(root.getId(), root.getName(), root.getSlug(), null, children, root.getSortOrder());
         }).collect(Collectors.toList());
         return ResponseEntity.ok(result);
     }
@@ -47,7 +47,15 @@ public class CategoryController {
         if (dto.getParentId() != null && categoryRepository.findById(dto.getParentId()).isEmpty()) {
             return ResponseEntity.badRequest().body("Parent category not found");
         }
-        Category saved = categoryRepository.save(new Category(null, dto.getName(), dto.getSlug(), dto.getParentId()));
+        // Place new category at the end of its sibling group
+        int maxOrder = categoryRepository.findByParentIdIsNullOrderBySortOrderAscNameAsc()
+                .stream().mapToInt(Category::getSortOrder).max().orElse(-1);
+        if (dto.getParentId() != null) {
+            maxOrder = categoryRepository.findByParentIdOrderBySortOrderAscNameAsc(dto.getParentId())
+                    .stream().mapToInt(Category::getSortOrder).max().orElse(-1);
+        }
+        Category toSave = new Category(null, dto.getName(), dto.getSlug(), dto.getParentId(), maxOrder + 1);
+        Category saved = categoryRepository.save(toSave);
         return ResponseEntity.status(HttpStatus.CREATED).body(toDTO(saved));
     }
 
@@ -61,7 +69,6 @@ public class CategoryController {
         if (slugConflict.isPresent() && !slugConflict.get().getId().equals(id)) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body("Slug already exists");
         }
-        // Prevent a category from becoming its own parent or circular reference
         if (id.equals(dto.getParentId())) {
             return ResponseEntity.badRequest().body("A category cannot be its own parent");
         }
@@ -73,16 +80,29 @@ public class CategoryController {
         return ResponseEntity.ok(toDTO(categoryRepository.save(cat)));
     }
 
+    record ReorderItem(Long id, int sortOrder) {}
+
+    @PutMapping("/reorder")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> reorder(@RequestBody List<ReorderItem> items) {
+        for (ReorderItem item : items) {
+            categoryRepository.findById(item.id()).ifPresent(cat -> {
+                cat.setSortOrder(item.sortOrder());
+                categoryRepository.save(cat);
+            });
+        }
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         if (categoryRepository.findById(id).isEmpty()) return ResponseEntity.notFound().build();
-        // Children have their parent_id set to NULL by the DB cascade rule
         categoryRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }
 
     private CategoryDTO toDTO(Category c) {
-        return new CategoryDTO(c.getId(), c.getName(), c.getSlug(), c.getParentId(), List.of());
+        return new CategoryDTO(c.getId(), c.getName(), c.getSlug(), c.getParentId(), List.of(), c.getSortOrder());
     }
 }
