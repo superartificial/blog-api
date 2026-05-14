@@ -41,6 +41,10 @@ public class Post {
     @Column(nullable = false, length = 50)
     private PostStatus status = PostStatus.DRAFT;
 
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "category_id")
+    private Category category;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "post_tags",

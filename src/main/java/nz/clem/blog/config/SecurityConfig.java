@@ -56,6 +56,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authz -> authz
                         .requestMatchers(HttpMethod.GET, "/api/posts").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/posts/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/pages").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/pages/{slug}").permitAll()
                         .requestMatchers("/api/health").permitAll()

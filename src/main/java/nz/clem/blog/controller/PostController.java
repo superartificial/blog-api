@@ -2,9 +2,11 @@ package nz.clem.blog.controller;
 
 import nz.clem.blog.dto.PostDTO;
 import nz.clem.blog.dto.PostSummaryDTO;
+import nz.clem.blog.entity.Category;
 import nz.clem.blog.entity.Post;
 import nz.clem.blog.entity.PostStatus;
 import nz.clem.blog.entity.Tag;
+import nz.clem.blog.repository.CategoryRepository;
 import nz.clem.blog.repository.PostRepository;
 import nz.clem.blog.repository.TagRepository;
 import nz.clem.blog.service.ImageReferenceService;
@@ -34,50 +36,51 @@ public class PostController {
     private TagRepository tagRepository;
 
     @Autowired
+    private CategoryRepository categoryRepository;
+
+    @Autowired
     private ImageReferenceService imageReferenceService;
 
     @GetMapping
-    public ResponseEntity<List<PostSummaryDTO>> getAllPublishedPosts(@RequestParam(required = false) String tag) {
-        List<Post> posts = (tag != null && !tag.isBlank())
-                ? postRepository.findByStatusAndTagNameOrderByCreatedAtDesc(PostStatus.PUBLISHED, tag)
-                : postRepository.findByStatusOrderByCreatedAtDesc(PostStatus.PUBLISHED);
+    public ResponseEntity<List<PostSummaryDTO>> getAllPublishedPosts(
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) String category) {
+        List<Post> posts;
+        if (tag != null && !tag.isBlank()) {
+            posts = postRepository.findByStatusAndTagNameOrderByCreatedAtDesc(PostStatus.PUBLISHED, tag);
+        } else if (category != null && !category.isBlank()) {
+            Optional<Category> cat = categoryRepository.findBySlug(category);
+            posts = cat.isPresent()
+                    ? postRepository.findByStatusAndCategoryOrderByCreatedAtDesc(PostStatus.PUBLISHED, cat.get().getId())
+                    : List.of();
+        } else {
+            posts = postRepository.findByStatusOrderByCreatedAtDesc(PostStatus.PUBLISHED);
+        }
         return ResponseEntity.ok(posts.stream().map(this::convertToSummaryDTO).collect(Collectors.toList()));
     }
 
     @GetMapping("/admin/all")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<PostSummaryDTO>> getAllPostsAdmin() {
-        List<PostSummaryDTO> posts = postRepository.findAllByOrderByCreatedAtDesc()
-                .stream()
-                .map(this::convertToSummaryDTO)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(posts);
+        return ResponseEntity.ok(postRepository.findAllByOrderByCreatedAtDesc()
+                .stream().map(this::convertToSummaryDTO).collect(Collectors.toList()));
     }
 
     @GetMapping("/tags")
     public ResponseEntity<List<String>> getAllTags() {
-        List<String> tags = tagRepository.findAll()
-                .stream()
-                .map(Tag::getName)
-                .sorted()
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(tags);
+        return ResponseEntity.ok(tagRepository.findAll()
+                .stream().map(Tag::getName).sorted().collect(Collectors.toList()));
     }
 
     @GetMapping("/{slug}")
     public ResponseEntity<PostDTO> getPostBySlug(@PathVariable String slug, Authentication authentication) {
         Optional<Post> post = postRepository.findBySlug(slug);
-        if (post.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
+        if (post.isEmpty()) return ResponseEntity.notFound().build();
         Post p = post.get();
         if (p.getStatus() != PostStatus.PUBLISHED) {
             boolean isAdmin = authentication != null &&
-                    authentication.getAuthorities().stream()
-                            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-            if (!isAdmin) {
-                return ResponseEntity.notFound().build();
-            }
+                    authentication.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+            if (!isAdmin) return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(convertToDTO(p));
     }
@@ -86,8 +89,7 @@ public class PostController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PostDTO> getPostById(@PathVariable Long id) {
         return postRepository.findById(id)
-                .map(this::convertToDTO)
-                .map(ResponseEntity::ok)
+                .map(this::convertToDTO).map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -96,18 +98,10 @@ public class PostController {
     public ResponseEntity<?> createPost(@RequestBody PostDTO postDTO) {
         try {
             Post post = new Post();
-            post.setTitle(postDTO.getTitle());
-            post.setSlug(postDTO.getSlug());
-            post.setContent(postDTO.getContent());
-            post.setExcerpt(postDTO.getExcerpt());
-            post.setHumanIntro(postDTO.getHumanIntro());
-            post.setAiNotes(postDTO.getAiNotes());
-            post.setStatus(parseStatus(postDTO.getStatus()));
-            post.setTags(resolveTags(postDTO.getTags()));
-
-            Post savedPost = postRepository.save(post);
-            imageReferenceService.syncForPost(savedPost);
-            return ResponseEntity.status(HttpStatus.CREATED).body(convertToDTO(savedPost));
+            applyDTO(post, postDTO);
+            Post saved = postRepository.save(post);
+            imageReferenceService.syncForPost(saved);
+            return ResponseEntity.status(HttpStatus.CREATED).body(convertToDTO(saved));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", "A post with slug '" + postDTO.getSlug() + "' already exists"));
@@ -118,24 +112,13 @@ public class PostController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> updatePost(@PathVariable Long id, @RequestBody PostDTO postDTO) {
         Optional<Post> post = postRepository.findById(id);
-        if (post.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-
+        if (post.isEmpty()) return ResponseEntity.notFound().build();
         try {
-            Post existingPost = post.get();
-            existingPost.setTitle(postDTO.getTitle());
-            existingPost.setSlug(postDTO.getSlug());
-            existingPost.setContent(postDTO.getContent());
-            existingPost.setExcerpt(postDTO.getExcerpt());
-            existingPost.setHumanIntro(postDTO.getHumanIntro());
-            existingPost.setAiNotes(postDTO.getAiNotes());
-            existingPost.setStatus(parseStatus(postDTO.getStatus()));
-            existingPost.setTags(resolveTags(postDTO.getTags()));
-
-            Post updatedPost = postRepository.save(existingPost);
-            imageReferenceService.syncForPost(updatedPost);
-            return ResponseEntity.ok(convertToDTO(updatedPost));
+            Post existing = post.get();
+            applyDTO(existing, postDTO);
+            Post updated = postRepository.save(existing);
+            imageReferenceService.syncForPost(updated);
+            return ResponseEntity.ok(convertToDTO(updated));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", "A post with slug '" + postDTO.getSlug() + "' already exists"));
@@ -145,13 +128,24 @@ public class PostController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deletePost(@PathVariable Long id) {
-        Optional<Post> post = postRepository.findById(id);
-        if (post.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
+        if (postRepository.findById(id).isEmpty()) return ResponseEntity.notFound().build();
         imageReferenceService.deleteForPost(id);
         postRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private void applyDTO(Post post, PostDTO dto) {
+        post.setTitle(dto.getTitle());
+        post.setSlug(dto.getSlug());
+        post.setContent(dto.getContent());
+        post.setExcerpt(dto.getExcerpt());
+        post.setHumanIntro(dto.getHumanIntro());
+        post.setAiNotes(dto.getAiNotes());
+        post.setStatus(parseStatus(dto.getStatus()));
+        post.setTags(resolveTags(dto.getTags()));
+        post.setCategory(dto.getCategoryId() != null
+                ? categoryRepository.findById(dto.getCategoryId()).orElse(null)
+                : null);
     }
 
     private Set<Tag> resolveTags(List<String> tagNames) {
@@ -160,20 +154,14 @@ public class PostController {
         for (String name : tagNames) {
             String trimmed = name.trim();
             if (trimmed.isEmpty()) continue;
-            Tag tag = tagRepository.findByName(trimmed)
-                    .orElseGet(() -> tagRepository.save(new Tag(null, trimmed)));
-            tags.add(tag);
+            tags.add(tagRepository.findByName(trimmed).orElseGet(() -> tagRepository.save(new Tag(null, trimmed))));
         }
         return tags;
     }
 
     private PostStatus parseStatus(String statusStr) {
         if (statusStr == null) return PostStatus.DRAFT;
-        try {
-            return PostStatus.valueOf(statusStr);
-        } catch (IllegalArgumentException e) {
-            return PostStatus.DRAFT;
-        }
+        try { return PostStatus.valueOf(statusStr); } catch (IllegalArgumentException e) { return PostStatus.DRAFT; }
     }
 
     private PostSummaryDTO convertToSummaryDTO(Post post) {
@@ -184,6 +172,11 @@ public class PostController {
         dto.setExcerpt(post.getExcerpt());
         dto.setStatus(post.getStatus().name());
         dto.setTags(post.getTags().stream().map(Tag::getName).sorted().collect(Collectors.toList()));
+        if (post.getCategory() != null) {
+            dto.setCategoryId(post.getCategory().getId());
+            dto.setCategoryName(post.getCategory().getName());
+            dto.setCategorySlug(post.getCategory().getSlug());
+        }
         dto.setCreatedAt(post.getCreatedAt());
         dto.setUpdatedAt(post.getUpdatedAt());
         return dto;
@@ -200,6 +193,11 @@ public class PostController {
         dto.setAiNotes(post.getAiNotes());
         dto.setStatus(post.getStatus().name());
         dto.setTags(post.getTags().stream().map(Tag::getName).sorted().collect(Collectors.toList()));
+        if (post.getCategory() != null) {
+            dto.setCategoryId(post.getCategory().getId());
+            dto.setCategoryName(post.getCategory().getName());
+            dto.setCategorySlug(post.getCategory().getSlug());
+        }
         dto.setCreatedAt(post.getCreatedAt());
         dto.setUpdatedAt(post.getUpdatedAt());
         return dto;

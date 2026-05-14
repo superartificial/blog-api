@@ -18,4 +18,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     @Query("SELECT DISTINCT p FROM Post p JOIN p.tags t WHERE p.status = :status AND t.name = :tagName ORDER BY p.createdAt DESC")
     List<Post> findByStatusAndTagNameOrderByCreatedAtDesc(@Param("status") PostStatus status, @Param("tagName") String tagName);
+
+    @Query("SELECT p FROM Post p WHERE p.status = :status AND (p.category.id = :categoryId OR p.category.parentId = :categoryId) ORDER BY p.createdAt DESC")
+    List<Post> findByStatusAndCategoryOrderByCreatedAtDesc(@Param("status") PostStatus status, @Param("categoryId") Long categoryId);
 }

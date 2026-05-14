@@ -19,6 +19,9 @@ public class PostDTO {
     private String humanIntro;
     private String aiNotes;
     private String status;
+    private Long categoryId;
+    private String categoryName;
+    private String categorySlug;
     private List<String> tags;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

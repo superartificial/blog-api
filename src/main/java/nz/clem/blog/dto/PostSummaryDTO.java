@@ -16,6 +16,9 @@ public class PostSummaryDTO {
     private String slug;
     private String excerpt;
     private String status;
+    private Long categoryId;
+    private String categoryName;
+    private String categorySlug;
     private List<String> tags;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
