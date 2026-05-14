@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 import nz.clem.blog.entity.PostStatus;
 
 @Entity
@@ -38,6 +40,14 @@ public class Post {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private PostStatus status = PostStatus.DRAFT;
+
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+        name = "post_tags",
+        joinColumns = @JoinColumn(name = "post_id"),
+        inverseJoinColumns = @JoinColumn(name = "tag_id")
+    )
+    private Set<Tag> tags = new HashSet<>();
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();

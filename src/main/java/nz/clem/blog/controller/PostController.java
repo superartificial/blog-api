@@ -4,7 +4,9 @@ import nz.clem.blog.dto.PostDTO;
 import nz.clem.blog.dto.PostSummaryDTO;
 import nz.clem.blog.entity.Post;
 import nz.clem.blog.entity.PostStatus;
+import nz.clem.blog.entity.Tag;
 import nz.clem.blog.repository.PostRepository;
+import nz.clem.blog.repository.TagRepository;
 import nz.clem.blog.service.ImageReferenceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -14,9 +16,11 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -27,15 +31,17 @@ public class PostController {
     private PostRepository postRepository;
 
     @Autowired
+    private TagRepository tagRepository;
+
+    @Autowired
     private ImageReferenceService imageReferenceService;
 
     @GetMapping
-    public ResponseEntity<List<PostSummaryDTO>> getAllPublishedPosts() {
-        List<PostSummaryDTO> posts = postRepository.findByStatusOrderByCreatedAtDesc(PostStatus.PUBLISHED)
-                .stream()
-                .map(this::convertToSummaryDTO)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(posts);
+    public ResponseEntity<List<PostSummaryDTO>> getAllPublishedPosts(@RequestParam(required = false) String tag) {
+        List<Post> posts = (tag != null && !tag.isBlank())
+                ? postRepository.findByStatusAndTagNameOrderByCreatedAtDesc(PostStatus.PUBLISHED, tag)
+                : postRepository.findByStatusOrderByCreatedAtDesc(PostStatus.PUBLISHED);
+        return ResponseEntity.ok(posts.stream().map(this::convertToSummaryDTO).collect(Collectors.toList()));
     }
 
     @GetMapping("/admin/all")
@@ -46,6 +52,16 @@ public class PostController {
                 .map(this::convertToSummaryDTO)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(posts);
+    }
+
+    @GetMapping("/tags")
+    public ResponseEntity<List<String>> getAllTags() {
+        List<String> tags = tagRepository.findAll()
+                .stream()
+                .map(Tag::getName)
+                .sorted()
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(tags);
     }
 
     @GetMapping("/{slug}")
@@ -87,6 +103,7 @@ public class PostController {
             post.setHumanIntro(postDTO.getHumanIntro());
             post.setAiNotes(postDTO.getAiNotes());
             post.setStatus(parseStatus(postDTO.getStatus()));
+            post.setTags(resolveTags(postDTO.getTags()));
 
             Post savedPost = postRepository.save(post);
             imageReferenceService.syncForPost(savedPost);
@@ -114,6 +131,7 @@ public class PostController {
             existingPost.setHumanIntro(postDTO.getHumanIntro());
             existingPost.setAiNotes(postDTO.getAiNotes());
             existingPost.setStatus(parseStatus(postDTO.getStatus()));
+            existingPost.setTags(resolveTags(postDTO.getTags()));
 
             Post updatedPost = postRepository.save(existingPost);
             imageReferenceService.syncForPost(updatedPost);
@@ -136,6 +154,19 @@ public class PostController {
         return ResponseEntity.noContent().build();
     }
 
+    private Set<Tag> resolveTags(List<String> tagNames) {
+        if (tagNames == null || tagNames.isEmpty()) return new HashSet<>();
+        Set<Tag> tags = new HashSet<>();
+        for (String name : tagNames) {
+            String trimmed = name.trim();
+            if (trimmed.isEmpty()) continue;
+            Tag tag = tagRepository.findByName(trimmed)
+                    .orElseGet(() -> tagRepository.save(new Tag(null, trimmed)));
+            tags.add(tag);
+        }
+        return tags;
+    }
+
     private PostStatus parseStatus(String statusStr) {
         if (statusStr == null) return PostStatus.DRAFT;
         try {
@@ -152,6 +183,7 @@ public class PostController {
         dto.setSlug(post.getSlug());
         dto.setExcerpt(post.getExcerpt());
         dto.setStatus(post.getStatus().name());
+        dto.setTags(post.getTags().stream().map(Tag::getName).sorted().collect(Collectors.toList()));
         dto.setCreatedAt(post.getCreatedAt());
         dto.setUpdatedAt(post.getUpdatedAt());
         return dto;
@@ -167,6 +199,7 @@ public class PostController {
         dto.setHumanIntro(post.getHumanIntro());
         dto.setAiNotes(post.getAiNotes());
         dto.setStatus(post.getStatus().name());
+        dto.setTags(post.getTags().stream().map(Tag::getName).sorted().collect(Collectors.toList()));
         dto.setCreatedAt(post.getCreatedAt());
         dto.setUpdatedAt(post.getUpdatedAt());
         return dto;
